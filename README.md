@@ -1,6 +1,6 @@
 # Exploratory Data Analysis of Gun Deaths in the US
 
-This project presents an exploratory analysis of the data on gun deaths in the US over a five year period (2012-2013), using R-Markdown. The data was obtained from the CDC and parsed using and R scriot obtained through fiveThirtyEight.com's [project on the same issue](https://github.com/fivethirtyeight/guns-data). The files included in this repo are as follows.
+This project presents an exploratory analysis of the data on gun deaths in the US over a five year period (2012-2013), using R-Markdown. The data were obtained from the CDC and parsed using and R script obtained through fiveThirtyEight.com's [project on the same issue](https://github.com/fivethirtyeight/guns-data). The files included in this repo are as follows.
 
 - `README.md` -> This file
 - `Gun_deaths_in_the_US.html` -> an HTML report of the analysis generated through r-markdown that shows several visualizations and highlights some findings trhough them

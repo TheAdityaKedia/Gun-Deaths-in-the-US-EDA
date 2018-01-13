@@ -1,17 +1,6 @@
 The Macabre Reality of Gun Deaths in the US by Aditya Kedia
 ========================================================
 
----
-title: "The Macabre Reality of Gun Deaths in the US"
-author: Aditya Kedia
-date: [Month] [date], [year]
-output: 
-  html_document:
-    toc: true
-    toc_depth: 3
-    toc_float: true
----
-
 ```{r global_options, include=FALSE}
 knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
 ```

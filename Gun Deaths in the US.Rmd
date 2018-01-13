@@ -1,0 +1,574 @@
+The Macabre Reality of Gun Deaths in the US by Aditya Kedia
+========================================================
+
+---
+title: "The Macabre Reality of Gun Deaths in the US"
+author: Aditya Kedia
+date: [Month] [date], [year]
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
+```
+
+#Introduction
+
+As a foreigner in the US, the relationship of the American diaspora with firearms, often bordering on grim obsession, has always surprised me. Private gun ownership in the US is the highest of any country in the world, and the fact that this would lead to more firearm deaths is rather obvious. Often, however, the focus of these discussions is mainly concentrated on the perpetrators of gun violence, and not enough attention is paid to the deaths and the victims themselves. In this document, therefore, I aim to explore these deaths form the years 2012-2016, and find out more about the victims themselves.
+
+#Acquiring The Data
+
+The data was acquired from the CDC's Multiple Cause of Death datafile. It was parsed using a script obtained from the wonderful data journalism site fiveThirtyEight.com. The Script, and the CSV file containing the data for all the years collected in one csv file are included with this submission.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# Load all of the packages that you end up using in your analysis in this code
+# chunk.
+
+# Notice that the parameter "echo" was set to FALSE for this code chunk. This
+# prevents the code from displaying in the knitted HTML output. You should set
+# echo=FALSE for all code chunks in your file, unless it makes sense for your
+# report to show the code that generated a particular plot.
+
+# The other parameters for "message" and "warning" should also be set to FALSE
+# for other code chunks once you have verified that each plot comes out as you
+# want it to. This will clean up the flow of your report.
+
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(gridExtra)
+library(ggthemes)
+library(grid)
+```
+
+```{r , Load_the_Data}
+# Load the Data
+gun_deaths<- read.csv("full_data.csv")
+```
+
+# Univariate Plots Section
+
+Let us dive into some summaries of and inital looks at the data.
+
+```{r echo=FALSE, Univariate_Plots}
+str(gun_deaths)
+```
+
+The set contains 175708 gun deaths from 2012 to 2016. That's 35141 gun deaths per year. Each entry contains the year and the month of the death, along with the age, sex, race and education level of the victim. If the victim was of Hispanic descent, the data gives their country of origin via a [these codes](https://www.cdc.gov/nchs/data/dvs/hispaniccodetitles.pdf). Additionally, it contains the place of death and whether the death was police related. 
+
+The index number, 'X' is a redundant variable and I will drop it in the next line of code. I am going to change the police variable to a factor rather than an integer. I'll do the same for the 'Hispanic' variable and then look at a summary of the data
+
+```{r}
+gun_deaths <- gun_deaths %>% 
+	select(year, month, intent, police, sex, age, race, hispanic, 
+		   place, education)
+gun_deaths$police <- as.factor(gun_deaths$police)
+gun_deaths$hispanic <- as.factor(gun_deaths$hispanic)
+summary(gun_deaths)
+```
+
+Already we can discern the following facts - 
+
+- Suicides far surpass accidents and homicides
+- A vast majority of gun deaths are not police related
+- More men die of bullet wounds than women
+- People of Caucasian descent are overrepresented compared to other races
+- Amongst Hispanics, Mexicans and Puerto Ricans are over-represented. This is likely as they are probably over-represented in the general population as well
+- Majority of Gun deaths occur at home
+- Most victims have a Highschool/GED education only
+
+Next we will look at a bar plot of the data year by year.
+
+```{r}
+ggplot(gun_deaths, aes(year)) + geom_bar()
+```
+
+Gun deaths in the US stayed almost constant from 2012 to 2014, followed by successive increases in 2015 and 2016. Of course, these numbers would make more sense in the context of the actual population number. We will explore this further in the next section. 
+
+I am going to create a new variable using years and months such that "time" becomes a little more continuous. Using 2012 as the base year, and dividing the months by 12.
+
+```{r}
+gun_deaths$time <- gun_deaths$year+gun_deaths$month/12 - 2012
+
+ggplot(subset(gun_deaths, !is.na(month)), aes(time)) + geom_freqpoly(bins = 60)
+
+ggplot(subset(gun_deaths, !is.na(month)), aes(time)) + geom_bar(color ="black")
+```
+
+
+There seems to be a consistent dip in the earlier part of every year. I wonder if this pattern will persist if we plotted the count over the months
+
+```{r}
+Months <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", 
+		    "Sep", "Oct", "Nov", "Dec")
+
+gun_deaths$month_chr <- ordered(gun_deaths$month, labels = Months)
+
+ggplot(gun_deaths, aes(month_chr)) + geom_bar(color = "black") +
+  coord_flip()
+  
+```
+
+If there is a pattern to be gleaned here, it seems that there are consistently fewer deaths in February. This may be due to the fact that February has fewer days (28/29 as opposed to 30/31). Since the data across days is unavailable, it is hard to tell if there is a February effect.
+
+Teh place of death also seems like an importnat variable, and the next plot compares the several factors using aother bar chart.
+
+```{r}
+ggplot(gun_deaths, aes(place)) + 
+  geom_bar()+
+  theme(axis.text.x = element_text(face="bold", 
+                           size=10, angle=90))
+```
+
+
+Let us also quickly look at distribution across age before we move on to bivariate analysis. 
+
+```{r}
+ggplot(gun_deaths, aes(age)) + geom_histogram(color = "black", binwidth = 1) +
+  scale_x_continuous(breaks = seq(0, 100, 5))
+```
+
+Looks like most victims of gun violence expire in their early 20s, and there is a sudden spike in the mid to late 50s. I am curious to see if there is a distribution across ages of the different intents. 
+
+I retrieved population numbers for the US from the [census website](https://www.census.gov/popclock/data_tables.php?component=growth) so that we can look at deaths as a proportion of the population. 
+
+```{r}
+# The following data fram takes US cenccus data for all 4 regions and adds them
+# up to give the population of the country for a particular year
+
+pop_us <- data.frame(year = c(2012, 2013, 2014, 2015, 2016), pop =
+c(55860261+67318295+73522988+117291728, 56047732+67534451+74230053+118422269,
+  56203078+67720120+74999361+119699966, 56296628+67839187+75822786+121081238,
+  56359360+67978168+76644950+122423457))
+
+pop_us
+```
+
+# Univariate Analysis
+
+### What is the structure of your dataset?
+
+The dataset contains several categorical variables for each death gun death in the US over the last 5 years (2012-2016). it classifies these deaths by intent, age, race, sex, place of death and education. additionally, it provides information about whether the death was caused by a police officer. 
+
+### What is/are the main feature(s) of interest in your dataset?
+
+I think the main feature of interest is the count itself and how it varies over the several categories
+
+### What other features in the dataset do you think will help support your \
+investigation into your feature(s) of interest?
+
+All the categorical variables will shed light on the count of gun deaths, why they happen, when, and to whom.
+
+### Did you create any new variables from existing variables in the dataset?
+
+The dataset is severely lacking in continuous numerical variables. I, therefore, one called time, which is a combination of month and year. The more accurate way of looking at the count is to look at it as a function of the population of the country. I therefore acquired the population data, to be later added to grouped versions of the gun_death data frames.
+
+### Of the features you investigated, were there any unusual distributions? \
+Did you perform any operations on the data to tidy, adjust, or change the form \
+of the data? If so, why did you do this?
+
+The dip in the number of deaths at the beginning of each year was a little surprising, although maybe this is due to the smaller number of days in February. The data for age vs gun deaths is nearly bimodal. I did not need to adjust or change the data yet, although I will need to group and summarize in later sections.
+
+
+# Bivariate Plots Section
+
+The first bivariate plot I want to look at is that of time vs age, to get an idea of whether the age of the gun victim has changed at all over the 5 years.
+
+```{r echo=FALSE, Bivariate_Plots}
+ggplot(gun_deaths, aes(x=time, y=age)) +
+	geom_point(alpha = 1/30, position = "jitter")
+```
+
+Note that in the above plot, the x-axis denotes time over 5 years, so 0 is the beginnig of 2012, while 5 is the end of 2016. No obvious patterns emerge here, suggesting that the distribution of ages of the victims of gun violence didn't change over the years. The two dark bands in the 20s and the 50s reinforces the earlier observation of the peaks in the count vs age distribution
+
+Let us now group data by the years, create a new variable to see the change in rate of gun violence
+
+```{r}
+death_by_years <- gun_deaths%>%group_by(year, intent, police)%>%summarise(count = n())
+
+death_by_years <-death_by_years %>% 
+	mutate(rate_per_hundred_thousand = count / 
+       ifelse(year==2012, pop_us[1,]$pop, 
+       ifelse(year==2013, pop_us[2,]$pop, 
+       ifelse(year==2014, pop_us[3,]$pop, 
+       ifelse(year==2015, pop_us[4,]$pop, 
+       ifelse(year==2016, pop_us[5,]$pop,0))))) * 100000)
+
+ggplot(death_by_years, aes(x = year, y = rate_per_hundred_thousand)) + 
+  geom_col()
+```
+
+
+Now we can truly see that the death rate due to firearms has in fact increased in 2015, and then again in 2016. a similar chart should be constructed for the reason of death.
+
+```{r}
+#The following plot averages the rate over the 5 years
+
+ggplot(subset(death_by_years, !is.na(death_by_years$intent)), 
+			  aes(x = intent, y = rate_per_hundred_thousand/5)) +
+  geom_col()
+```
+
+Again, we see that the number of deaths due to suicide is much greater than the number for any other reason. 
+
+Next, let us look at the correlation between age and suicide.
+In the next block of code, I have grouped the dataset by age and counted the number of suicides for each.
+
+```{r}
+gun_suicide_by_age <- subset(gun_deaths, gun_deaths$intent == "Suicide") %>% 
+					  group_by(age)%>% summarise(num_suicides = n()) 
+
+gun_homicide_by_age<-subset(gun_deaths, gun_deaths$intent == "Homicide") %>% 
+					 group_by(age)%>% summarise(num_homicides = n()) 
+
+p1<- ggplot(gun_suicide_by_age, aes(x = age, y = num_suicides)) + geom_line()
+p2<- ggplot(gun_homicide_by_age, aes(x = age, y = num_homicides)) + geom_line()
+
+grid.arrange(p1, p2)
+
+```
+
+The above plots, while morbid and depressing, seem to reveal crucial truths about our society. earlier we saw how the distribution of gun deaths across the ages was distributed such that younger victims were over-represented in the sample. We now see that a majority of that number comes from homicides. Take them away and we see a very different pattern. People in their 50s are way more likely to commit suicide, while the younger victims of firearms are much more likely to die in a homicide.
+
+I wonder if this pattern changes with race. We will explore this in the multi variate section. 
+
+We have other variables to analyze, and I think they would be better analyzed in a multivariate fashion.
+
+# Bivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the \
+investigation. How did the feature(s) of interest vary with other features in \
+the dataset?
+
+The number of gun deaths has increased in the last few years, and the trajectory seems upward. Suicides are much more common amongst firearm deaths than homicides. When looking only at the death due to suicides, people in their 50s are over-represented, while people in their 20s are over-represented in the population of younger victims.
+
+### Did you observe any interesting relationships between the other features \
+(not the main feature(s) of interest)?
+
+No particularly interesting relationships were observed amongst the other variables.
+
+### What was the strongest relationship you found?
+
+The strongest relationship is that amongst age and gun suicides, in that middle age commit gun suicides more often than any other age group.
+
+
+# Multivariate Plots Section
+
+The first thing to explore here is the rate of gun death per year, colored by the the police variable, to see if ther have been changes in police gun deaths over the years.
+
+```{r}
+
+ggplot(death_by_years, aes(x = year, 
+                           y = rate_per_hundred_thousand, 
+                           fill = police)) + 
+  geom_col(color = "black")
+
+```
+ 
+ Looks like the number of non police deaths is so uch higher than the number of police deaths, that any pattern in the police deaths is drwoned out. Let us subset the data to see only the deaths caused by police, and try again.
+ 
+```{r}
+
+ggplot(subset(death_by_years, police ==1), aes(x = year, 
+                           y = rate_per_hundred_thousand, 
+                           fill = police)) + 
+  geom_col(color = "black")
+
+```
+
+
+Now we get a better picture of the police deaths over the years. While there are some changes in the numbers over the years, they seen to small to actually find a pattern/trend in them.
+
+Now we will flesh out the pattern made obvious in the last plot, using our age distribution histogram 
+
+```{r echo=FALSE, Multivariate_Plots}
+
+ggplot(subset(subset(gun_deaths, !is.na(gun_deaths$intent)), 
+              gun_deaths$sex == "M"), 
+			  aes(x = age, fill = intent)) +
+  geom_histogram(binwidth = 1, color = "black") +
+  scale_fill_brewer(type = 'qual') +
+  theme(legend.position="bottom") + xlim(0, 100) + 
+  ggtitle("Male gun deaths over age")
+
+ggplot(subset(subset(gun_deaths, !is.na(gun_deaths$intent)), 
+              gun_deaths$sex == "F"), 
+			  aes(x = age, fill = intent)) +
+  geom_histogram(binwidth = 1, color = "black") +
+  scale_fill_brewer(type = 'qual') +
+  theme(legend.position="bottom") + xlim(0, 100) + 
+  ggtitle("Female gun deaths over age")
+
+```
+
+We can see how fewer females die due to guns than males, and that the peak of suicides observed in the early 20s amongst the male populace is missing amongst the females. I have not considered rates here as the ratio of males to females is 1.06 in the US, so the raw number speak for themselves. A more side by comparison of male and female statistics may help the comparison a bit more.
+
+```{r}
+
+ggplot(data = gun_deaths, aes(x = age, fill = sex)) + 
+  geom_bar(data = filter(gun_deaths, sex == "M"), binwidth = 1,  
+  		   color = "black") + 
+  geom_bar(data = filter(gun_deaths, sex == "F"), aes(y = -..count..), 
+  		   binwidth = 1,  color = "black") + 
+  scale_y_continuous(labels = abs) + 
+  coord_flip()
+
+```
+
+
+In the suicide peak, it may be worth looking at the education levels of the victims. This may give us insight into the effect that education has on suicide via guns. It is important to note that education itself is a factor of age, and the younger cohort is unlikely to be educated beyond high school. So I will only look at the age range of 20 to 100.
+
+```{r}
+ggplot(subset(gun_deaths, (gun_deaths$intent == "Suicide")), 
+			  aes(x = age, fill = education)) +
+  geom_histogram(binwidth = 1, color = "black") +
+  scale_fill_brewer(type = 'qual') +
+  theme(legend.position="bottom") + xlim(20, 100)
+```
+
+We notice that the majority of people have a high school education, followed by 'Some College' followed by BA+. This, however, may indicate absolute numbers. The percentage of people with different levels of education in the population itself would need to be factored in, in order to make a better comparison.
+
+The next task is to divide gun deaths by race.
+
+```{r}
+gun_suicide_by_age_race <- subset(gun_deaths, gun_deaths$intent == "Suicide")%>%
+						  group_by(age, race)%>% summarise(num_suicides = n()) 
+
+gun_homicide_by_age_race <- subset(gun_deaths, gun_deaths$intent == "Homicide")%>%
+						    group_by(age, race)%>%
+						    summarise(num_homicides = n())
+
+death_by_years_race <- gun_deaths%>%
+					   group_by(year, race)%>%summarise(count = n())
+
+death_by_years_race <- death_by_years_race%>%
+					   mutate(rate_per_hundred_thousand = count / 
+					   ifelse(year==2012, pop_us[1,]$pop, 
+					   ifelse(year==2013, pop_us[2,]$pop, 
+					   ifelse(year==2014, pop_us[3,]$pop, 
+					   ifelse(year==2015, pop_us[4,]$pop, 
+					   ifelse(year==2016, pop_us[5,]$pop,0))))) * 100000)
+
+ggplot(death_by_years_race, 
+	   aes(x = year, y = rate_per_hundred_thousand, fill = race)) +
+	   geom_col() + coord_flip() + theme(legend.position="bottom")
+```
+
+The plot above shows a few important thing. Mainly, most of the victims are white, followed by blacks, Hispanics, Asians/Pacific Islanders and Native Americans.To get a better idea of this distribution, we need to control for the representation of these groups in the population. According to the [cencus bureau](https://www.census.gov/quickfacts/fact/table/US/PST045216), as of July 1st 2016,
+
+```{r}
+
+race_breakdown <- data.frame(race = c("White", "Black", "Hispanic",
+									  "Asian/Pacific Islander", 
+									  "Native American/Native Alaskan", 
+									  "Other"), 
+						     perc = c(61.3, 13.3, 15.6, 5.9, 1.3, 2.6))
+
+
+race_breakdown
+
+```
+
+I am going to use these figures universally, even though there have been marginal changes in the last few years. Therefore, we must create a new data frame to reflect these numbers
+
+U
+```{r}
+
+death_by_years_race <-death_by_years_race%>%mutate(pop_percent = 
+     ifelse(race == "White", 0.613,
+     ifelse(race == "Black", 0.133,
+     ifelse(race == "Hispanic", 0.156, 
+     ifelse(race == "Asian/Pacific Islander", 0.059,
+     ifelse(race == "Native American/Native Alaskan",0.013, 0))))))
+
+death_by_years_race <-death_by_years_race%>%
+						mutate(population =
+ 						ifelse(year==2012, pop_us[1,]$pop, 
+ 						ifelse(year==2013, pop_us[2,]$pop,
+ 						ifelse(year==2014, pop_us[3,]$pop, 
+ 						ifelse(year==2015, pop_us[4,]$pop,
+ 						ifelse(year==2016, pop_us[5,]$pop,0))))))
+
+death_by_years_race <- death_by_years_race %>% 
+					   mutate(rate_per_hundred_thousand = 
+					   		  count/(pop_percent*population)*100000)
+
+        
+ggplot(death_by_years_race, 
+	   aes(x = year, y = rate_per_hundred_thousand, fill = race))+
+	   geom_col() + coord_flip() + theme(legend.position="bottom")
+
+
+```
+
+
+Adjusting for the percentage of these races in the population we see that people of African American descent are much more likely to be victims of gun violence than any other race. I will creat one final data frame that groups all important variables and gives us counts and populations for each of the relevant factors for further analysis
+
+```{r}
+gun_deaths_by_factors <- gun_deaths %>% 
+                         group_by(time, year, age, sex, race, 
+                                  intent, police, place) %>% 
+                         summarise(count = n())
+
+gun_deaths_by_factors <- suppressMessages(suppressWarnings(
+						 left_join(gun_deaths_by_factors, race_breakdown) %>% 
+						 left_join(pop_us)))
+
+
+gun_deaths_by_factors <- gun_deaths_by_factors %>% 
+						 mutate(rate_per_hundred_thousand = 100000* count/pop, 
+						 	    rate_by_race = 100000* count/(pop*perc)) %>% 
+						 select(-pop, -perc )
+
+gun_deaths_by_factors
+
+
+```
+
+Now we can look at the rate of gun deaths with time colored by intent so that we get a better sense of changes in the types of gun deaths over time.
+
+```{r}
+
+ggplot(gun_deaths_by_factors, 
+	   aes(x = time, y = rate_per_hundred_thousand, fill = intent)) + 
+	   geom_col() + scale_x_continuous(breaks = seq(0.08333, 4.08333, 1), 
+	   								   labels = c("Jan 2012", "Jan 2013", 
+	   								   			  "Jan 2014", "Jan 2015", 
+	   								   			  "Jan 2016"))
+
+```
+
+A fact that seems to jump out looking at this plot is that the increase in gun deaths that we observed earlier are mostly due to homicides. This could be further explored if we extracted all the homicide cases from the CDC data, and drew a comparison over time.
+
+Now we can subdivide the intents by age and race
+
+```{r}
+ggplot(gun_deaths_by_factors, 
+						aes(x = age, y = rate_by_race)) + 
+						geom_col(aes(fill = intent)) + 
+						facet_wrap(~race, scales = "free") + 
+						theme(legend.position = c(0.85, 0.25))
+```
+
+the rate of death is slightly higher for people of Hispanic and African American descent, while it is fairly low for Asians, Hawaiians, and other Pacific Islanders. Subverting our earlier finding about suicides being a bigger problem than homicides in terms of gun deaths, we see that in the hispanic and African American Communities, homicides are infact higher than suicides.
+
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the \
+investigation. Were there features that strengthened each other in terms of \
+looking at your feature(s) of interest?
+
+I found That the relationship between age, gender and the intent of gun death are pretty strong. Most gun victims are male, among whom the younger cohort in their 20s are victims of homicide, while the older are victims of suicide.
+
+### Were there any interesting or surprising interactions between features?
+
+I did not find any interesting relationships between features.
+
+### OPTIONAL: Did you create any models with your dataset? Discuss the \
+strengths and limitations of your model.
+
+I did not create a model with my dataset. I am unaware of what such a model would ty to predict, or what it would look like. I suppose it should try to predict the likelihood of a person dying of gun violence, given their race, sex, age, and education level. It could also tries to predict the anticipated number of gun deaths in the US for a given year, given the demographic information about the population's race, sex, age and level of education.
+
+------
+
+# Final Plots and Summary
+
+### Plot One
+```{r echo=FALSE, Plot_One}
+
+ggplot(gun_deaths_by_factors, 
+	   aes(x = time, y = rate_per_hundred_thousand, fill = intent)) + 
+	   geom_col() + scale_x_continuous(breaks = seq(0.08333, 4.08333, 1), 
+	   								   labels = c("Jan 2012", "Jan 2013", 
+	   								   			  "Jan 2014", "Jan 2015", "Jan 2016")) + 
+	   labs(x = "Time", y = "Gun Deaths per 100,000 people", 
+	   		title = "Gun Deaths in the US over Time", fill = "Intent") + 
+	   theme(legend.position = "bottom", 
+	   		 panel.background = (element_rect( color = "black", fill = "white")), 
+	   		 panel.grid.major = element_line(colour="black", size = (0.1)), 
+	   		 panel.grid.minor = element_line(size = (0.1), colour="black"))
+
+```
+
+### Description One
+
+The plot above shows that the rate of gun deaths in the US in the last 5 years while varying month to month, is gradually increasing over time. Every year seems to see a dip in the number of gun deaths in February, ad a peak in July. The former is probably due to February having fewer days. I have not been able to find a convincing explanation of the latter.
+
+### Plot Two
+
+```{r echo = FALSE}
+suppressMessages(ggplot(gun_deaths_by_factors, 
+						aes(x = age, y = rate_by_race)) + 
+						geom_col(aes(fill = intent)) + 
+						facet_wrap(~race, scales = "free") + 
+						labs(x = "Age", y = "Gun Deaths per 100,000 people", 
+							 title = "Gun Deaths in the US by age, 
+							 for Different Races", fill = "Intent") +
+					    theme(legend.position = c(0.85, 0.25), 
+					    	  panel.background = (element_rect( color = "grey", 
+					    	  									fill = "white")),
+					    	  					  panel.grid.major = 
+					    	  					  element_line(colour="grey",
+					    	  					  			   size = (0.1)), 
+					    	  					  			   panel.grid.minor = 
+					    	  					  			   element_line(size = 
+					    	  					  			   				(0.1),
+					    	  					  			   colour="grey")))
+```
+
+
+### Description Two
+
+The plot above shows the rate of gun death per 100,000 people for every race, colored by the intent. The implications of these plots are dire and untasteful. To spell out some of them, we can clearly see the marks of the proverbial quarter-life and mid-life crises, in the spike in gun suicides in the early 20s and 50s, although they can only be really fleshed out if we looked at the data for all suicides in the country. Moreover, the rate of death is slightly higher for people of Hispanic and African American descent, while it is fairly low for Asians, Hawaiians, and other Pacific Islanders.
+
+### Plot Three
+```{r echo=FALSE, Plot_Three}
+
+suppressMessages(
+ggplot(data = gun_deaths, aes(x = age, fill = sex)) + 
+  geom_bar(data = filter(gun_deaths, sex == "M"), binwidth = 1,  
+  		   color = "black") + 
+  geom_bar(data = filter(gun_deaths, sex == "F"), aes(y = -..count..), 
+  		   binwidth = 1,  color = "black") + 
+  scale_y_continuous(labels = abs) + 
+  labs(x = "Age", y = "Number of Gun Deaths", 
+       title = "Gun Deaths in the US by gender (2012-2016)", fill = "Gender") + 
+  theme(legend.position = "bottom", 
+  		panel.background = (element_rect( color = "black", fill = "white")), 
+  		panel.grid.major = element_line(colour="black", size = (0.1)), 
+  		panel.grid.minor = element_line(size = (0.1), colour="black")) + 
+  xlim(1, 99) + coord_flip())
+
+```
+
+### Description Three
+
+I shall leave the reader with this final plot of male vs female gun deaths by age. This sheds light on how the rate of gun death for men is nearly eight times what it is for women. The peaks in the mid-twenties and fifties show up for both genders but are a lot more pronounced for men than for women.
+
+------
+
+# Reflection
+
+This has been a grim and emotionally taxing exploration, albeit an important one. The primary insights are as follows:
+
+- While the media and the American diaspora devolve into an ugly debate about gun control every time there is a mass shooting, the data shows us that the bigger issue when it comes to gun deaths is that of suicides, happening almost evenly, across time. While controlling access to guns will not take care of suicidal tendencies in the population, there is a finality to firearm suicides that doesn't exist with other methods. This point can be better made by exploring rates of suicide across several countries
+
+- We found that the quarter-life and mid-life crises so excessively talked about in popular culture are ferociously real, as evidenced by the patterns found in the suicide data
+
+- We observed that the rate of gun deaths, across both homicides and suicides, are much lower for women, compared to men.
+
+- finally, we learned that the rate of gun deaths in the US seems to be rising, and if we are ever going to do anything about gun control, the time is now. 
+
+Some of the struggles in working with the data were the severely twisted syntax that ggplot often makes one go through for things that one would assume simply. For example, the pyramid chart shown in the last section should have included a label on each side saying "Female" and "Male" Respectively, so that the color parameter could be used for other variables. This, however, proved excruciatingly difficult, and after several tries, I gave up. The massively categorical nature of the data did make it easy to see patterns and that did make the exploration go well.
+
+Further exploration of this dataset could yield useful models for public health purposes. For example - 
+
+- predict the likelihood of a person dying of gun violence, given their race, sex, age, and education level. 
+
+- predict the anticipated number of gun deaths in the US for a given year, given the demographic information about the population's race, sex, age and level of education.
+
+As the macabre denouement of this exploration I would like to leave the reader with this musing - would the ominous manifestation of the universality of these existential crises shown here give pause to the people suffering from these pathologies? And if they were to find solace in the realization that in fact all of us go through these points in life, would it disrupt this very pattern? 
